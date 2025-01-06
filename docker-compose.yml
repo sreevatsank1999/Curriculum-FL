@@ -1,0 +1,52 @@
+version: "3.9"
+services:
+  nvidia-torch-cuda-devel:
+    build:
+      context: .
+      dockerfile: nvidia-torch-cuda-devel.dockerfile
+    image: nvidia-torch-cuda-cfl:latest
+    container_name: nvidia-torch-cuda-cfl_${USER}
+    shm_size: '16g'
+    ipc: "host"
+      #user: $UID:$GID
+    user: 0:0
+      #userns_mode: "keep-id"
+      #    security_opt:
+      #  - label=disable
+    volumes:
+      - ".:/home/torch/CFL:rw"
+      - "vscode-config:/home/torch/.vscode-server:rw"
+    deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: "all"
+             capabilities: [gpu]
+    working_dir: "/home/torch/CFL"
+    # command: ["jupyter", "notebook"]
+    command: ["tail", "-f", "/dev/null"]
+
+  tensorboard:
+    image: nvcr.io/nvidia/tensorflow:22.07-tf2-py3
+    container_name: tensorboard-cfl_${USER}
+    ipc: "host"
+    user: $UID:$GID
+    network_mode: "host"
+    volumes:
+      - "./save_results:/var/CFL/save_results:rw"
+      # - "vscode-config:/home/torch/.vscode-server:rw"
+    deploy:
+     resources:
+       reservations:
+         devices:
+           - driver: nvidia
+             count: "all"
+             capabilities: [gpu]
+    working_dir: "/var/CFL/"
+    command: "tensorboard --bind_all --logdir='save_results/FedAvgPartDiff_f/fedavg_curr_lg_loss/cifar10/noniid-labeldir/simple-cnn/tblog_client100round100_rand_step_1.0a_1.0b_data_curr_linear_0.8a_0.2b_Gloss_p0.3inc100_beta0.5'"
+    # command: ["tail", "-f", "/dev/null"]
+
+volumes:
+  vscode-config:
+    driver: local

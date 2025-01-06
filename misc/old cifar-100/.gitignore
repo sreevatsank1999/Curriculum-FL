@@ -1,0 +1,13 @@
+# Object file
+*.o
+
+# Ada Library Information
+*.ali
+
+.settings/
+__pycache__/
+.ipynb_checkpoints/
+*__pycache__*
+*.pyc
+*.DS_Store
+scripts_rci/results/

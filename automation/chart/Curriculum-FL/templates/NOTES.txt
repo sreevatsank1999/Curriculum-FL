@@ -1,0 +1,2 @@
+{{ .Chart.Name }} job deployed Successfully with below parameters
+    {{- toYaml .Values }}

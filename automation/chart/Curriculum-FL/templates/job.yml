@@ -1,0 +1,130 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cfl.{{ required "Missing a required value jobParam.name" .Values.jobParam.name | lower }}
+  {{- if .Values.jobParam.description }}
+  annotations:
+    jobDescription: {{ .Values.jobParam.description | quote }}
+  {{- end }}
+  labels:
+    {{- include "CurriculumFL.labels" . | nindent 4 }}
+spec: 
+  template:
+    spec:
+      initContainers:
+      - image: docker.io/ictu/sshpass:latest
+        name: get-cfl-code
+        imagePullPolicy: Always
+        command: ["/bin/sh"]
+        args: [ "-c",
+            "sshpass -p $(PASSWORD) \
+            scp -r -o StrictHostKeyChecking=no \
+            $(USERNAME)@{{ .Values.code.server }}:$(CFL_CODEPATH)/* /code "
+          ]
+        env:
+          - name: CFL_CODEPATH
+            value: {{ .Values.code.directory }}
+          - name: USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: {{ required "Missing a required parameter credentialSecret" .Values.credentialSecret }}
+                key: user
+          - name: PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: {{ required "Missing a required parameter credentialSecret" .Values.credentialSecret }}
+                key: passwd
+        volumeMounts:
+          - mountPath: /code
+            name: cfl-code
+      containers:
+      - image: {{ .Values.image.registry }}/nvidia-torch-cuda-cfl:{{ .Chart.AppVersion }}
+        name: nvidia-torch-cuda
+        imagePullPolicy: Always
+        workingDir: /home/torch/CFL
+        # command: ["pwd"]
+        command: ["python3"]
+        args: ["main.py", 
+                  "--ntrials={{ .Values.cfl.ntrials }}",
+                  "--seed={{ .Values.cfl.seed }}",
+                  "--rounds={{ .Values.cfl.rounds }}",
+                  "--num_users={{ .Values.cfl.num_users }}",
+                  "--frac={{ .Values.cfl.frac }}",
+                  "--local_ep={{ .Values.cfl.local_ep }}",
+                  "--local_bs={{ .Values.cfl.local_bs }}",
+                  "--lr={{ .Values.cfl.lr }}",
+                  "--momentum={{ .Values.cfl.momentum }}",
+                  "--glob_momentum={{ .Values.cfl.glob_momentum }}",
+                  "--model={{ .Values.cfl.model }}",
+                  "--dataset={{ .Values.cfl.dataset }}",
+                  "--partition={{ .Values.cfl.partition }}",
+                  "--partition_difficulty_dist={{ .Values.cfl.partition_difficulty_dist }}",
+                  "--num_partitions={{ .Values.cfl.num_partitions }}",
+                  "--ordering={{ .Values.cfl.ordering }}",
+                  "--pacing_f={{ .Values.cfl.pacing_f }}",
+                  "--pacing_a={{ .Values.cfl.pacing_a }}",
+                  "--pacing_b={{ .Values.cfl.pacing_b }}",
+                  "--client_ordering={{ .Values.cfl.client_ordering }}",
+                  "--client_pacing_f={{ .Values.cfl.client_pacing_f }}",
+                  "--client_pacing_a={{ .Values.cfl.client_pacing_a }}",
+                  "--client_pacing_b={{ .Values.cfl.client_pacing_b }}",
+                  "--client_bs={{ .Values.cfl.client_bs }}",
+                  "--exp_label={{ .Values.cfl.exp_label }}",
+                  "--datadir={{ .Values.cfl.datadir }}",
+                  "--logdir={{ .Values.cfl.logdir }}",
+                  "--ptdir={{ .Values.cfl.ptdir }}",
+                  "--train_expert={{ .Values.cfl.train_expert }}",
+                  "--log_clientnet={{ .Values.cfl.log_clientnet }}",
+                  "--data_score_sample_p={{ .Values.cfl.data_score_sample_p }}",
+                  "--client_score_sample_n={{ .Values.cfl.client_score_sample_n }}",
+                  "--log_filename={{ .Values.cfl.log_filename }}",
+                  "--alg={{ .Values.cfl.alg }}",
+                  "--beta={{ .Values.cfl.beta }}",
+                  "--local_view={{ .Values.cfl.local_view }}",
+                  "--lg_scoring={{ .Values.cfl.lg_scoring }}",
+                  "--noise={{ .Values.cfl.noise }}",
+                  "--gpu={{ .Values.cfl.gpu }}",
+                  "--print_freq={{ .Values.cfl.print_freq }}",
+            ]
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        volumeMounts:
+        - mountPath: /dev/shm
+          name: dshm
+        - mountPath: /home/torch/CFL
+          name: cfl-code
+        - mountPath: /home/torch/CFL/data
+          name: cfl-dataset
+        - mountPath: /home/torch/CFL/save_results
+          name: cfl-result
+        - mountPath: /home/torch/CFL/pretrain
+          name: cfl-pretrain
+      {{- if .Values.requiredGPU }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: nvidia.com/gpu.product
+                operator: In
+                values:
+                  {{- toYaml .Values.requiredGPU | nindent 16 }}
+      {{- end}}
+      restartPolicy: {{ .Values.jobParam.restartPolicy }}
+
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: {{ .Values.resources.requests.memory }}
+      - name: cfl-code
+        emptyDir: {}
+      - name: cfl-dataset
+        persistentVolumeClaim:
+          claimName: {{ .Values.storage.data }}
+      - name: cfl-result
+        persistentVolumeClaim:
+          claimName: {{ .Values.storage.results }}
+      - name: cfl-pretrain
+        persistentVolumeClaim:
+          claimName: {{ .Values.storage.pretain }}

@@ -1,0 +1,79 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cfl-job.table-1
+spec:
+  template:
+    spec:
+      initContainers:
+        - image: docker.io/ictu/sshpass:latest
+          name: get-cfl-code
+          imagePullPolicy: Always
+          command: ["/bin/sh"]
+          args: [ "-c",
+              "sshpass -p $(PASSWORD) \
+              scp -r -o StrictHostKeyChecking=no \
+              $(USERNAME)@lambda-alpha.ucsd.edu:$(CFL_CODEPATH)/* /code "
+            ]
+          env:
+            - name: CFL_CODEPATH
+              value: ~/Projects/Curriculum-FL
+            - name: USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: credential-skadaveru
+                  key: user
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: credential-skadaveru
+                  key: passwd
+          # securityContext:
+          #   capabilities:
+          #     add: ["SYS_ADMIN"]
+          volumeMounts:
+            - mountPath: /code
+              name: cfl-code
+      containers:
+        - image: lambda-alpha.ucsd.edu/nvidia-torch-cuda-cfl:v1.4.0
+          name: nvidia-torch-cuda
+          imagePullPolicy: Always
+          workingDir: /home/torch/CFL/scripts_rci
+          command: ["./fedavg_curr_lg_loss.sh"]
+          resources:
+            limits:
+              cpu: 3000m
+              memory: 12Gi
+              nvidia.com/gpu: 1
+            requests:
+              cpu: 2000m
+              memory: 10Gi
+              nvidia.com/gpu: 1
+          volumeMounts:
+            - mountPath: /home/torch/CFL
+              name: cfl-code
+            - mountPath: /home/torch/CFL/data
+              name: cfl-dataset
+            - mountPath: /home/torch/CFL/save_results
+              name: cfl-result
+            - mountPath: /home/torch/CFL/pretrain
+              name: cfl-pretrain
+      # tolerations:
+      #   - key: nautilus.io/noceph
+      #     operator: "Exists"
+      #   - key: nautilus.io/science-dmz
+      #     operator: "Exists"
+      restartPolicy: OnFailure
+
+      volumes:
+        - name: cfl-code
+          emptyDir: {}
+        - name: cfl-dataset
+          persistentVolumeClaim:
+            claimName: cfl-dataset-pvc
+        - name: cfl-result
+          persistentVolumeClaim:
+            claimName: cfl-result-pvc
+        - name: cfl-pretrain
+          persistentVolumeClaim:
+            claimName: cfl-pretrain-pvc

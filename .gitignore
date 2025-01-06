@@ -1,0 +1,8 @@
+**/__pycache__
+save_results/**
+.ipynb_checkpoints/**
+data/**
+pretrain/**
+# .vscode/**
+
+secret-credential-*.yml
